@@ -165,7 +165,7 @@ h3 span{color:var(--mag-soft)}
 #toast.show{transform:translate(-50%,0)}
 
 /* ---------- remote view (GitHub Pages) ---------- */
-body.remote #voice-btn,body.remote #console-btn{display:none}
+body.remote #console-btn{display:none}
 
 /* ---------- phone / small screens ---------- */
 @media(max-width:900px){
@@ -367,6 +367,7 @@ requestAnimationFrame(draw);
 const REMOTE=location.protocol==='https:';
 
 function renderMetrics(m){
+  window._m=m;
   CLIENTS=m.clients;
     $('#mo').textContent=m.month;
     const c=m.calendar_coverage;
@@ -765,11 +766,66 @@ function startRec(){
   try{rec.start();}catch(_){}
 }
 
+/* Remote voice brain — answers from the decrypted snapshot + live Sevak data,
+   entirely in the browser. The full co-founder brain stays on the Mac. */
+function remoteAnswer(cmd){
+  const q=cmd.toLowerCase(), m=window._m, sv=window._sevak||{};
+  const inr=n=>'rupees '+Math.round(n||0).toLocaleString('en-IN');
+  if(/money|overdue|invoice|owe|collect|bill|payment|paisa/.test(q)){
+    if(!sv.money)return 'Money data needs Digital Sevak — tap the money panel and sign in once.';
+    const mo=sv.money;
+    return `${inr(mo.overdue_amount)} overdue across ${mo.overdue_invoices} invoices. This month you billed ${inr(mo.billed_this_month)} and collected ${inr(mo.collected_this_month)}.`;
+  }
+  if(/stuck|waiting|approval|sign.?off/.test(q)){
+    const st=sv.stuck_with_client_over_3d, out=[];
+    if(st)out.push(`${st.length} posts stuck with clients over three days`+(st.length?`. Worst: ${st.slice(0,3).map(s=>s.client+', '+s.days+' days').join('; ')}`:''));
+    if(m)out.push(`${m.approval_pending_total} posts pending client approval this month`);
+    return out.join('. ')||'Unlock the dashboard with the PIN first.';
+  }
+  if(/team|load|workload|who.?s (doing|busy|free)/.test(q)){
+    const load=sv.open_work_per_person;
+    if(!load)return 'Team load needs Digital Sevak — sign in on the team panel.';
+    const e=Object.entries(load).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    return e.length?'Open work: '+e.map(([w,n])=>`${w} has ${n}`).join(', ')+'.':'No open work items in Digital Sevak.';
+  }
+  if(/inbox|directive|to.?do|task|what.?s (open|pending)/.test(q)){
+    if(!m)return 'Unlock the dashboard with the PIN first.';
+    const o=m.inbox.open;
+    return o.length?`${o.length} open directives. Top ones: ${o.slice(0,3).map(x=>x.replace(/^\d{4}-\d{2}-\d{2}\s*[—–-]\s*/,'')).join('. Next: ')}`:'Inbox is clear. Nothing waiting on you.';
+  }
+  if(/calendar|coverage|content plan/.test(q)){
+    if(!m)return 'Unlock the dashboard with the PIN first.';
+    const c=m.calendar_coverage;
+    return `${c.covered.length} of ${c.total} clients have a ${m.month} calendar`+(c.missing.length?`. Missing: ${c.missing.slice(0,5).join(', ')}${c.missing.length>5?', and more':''}.`:'. Full coverage.');
+  }
+  if(/pipeline|posts/.test(q)){
+    if(!m||!m.pipeline.length)return 'No pipeline data in the snapshot yet.';
+    return m.pipeline.slice(-3).map(p=>`${p.client}: ${p.posts} posts, ${p.approval_pending} pending approval`).join('. ')+'.';
+  }
+  if(/brief/.test(q)){
+    return m&&m.last_brief?`Last morning brief was ${m.last_brief}${m.brief_today?', which is today':''}. The full text lives in the briefings folder on the Mac.`:'No brief on record yet.';
+  }
+  if(/status|summary|overview|how (are|is)|everything|kya (haal|chal)/.test(q)){
+    const bits=[];
+    if(sv.money)bits.push(`${inr(sv.money.overdue_amount)} overdue`);
+    if(m){const c=m.calendar_coverage;
+      bits.push(`${m.approval_pending_total} posts awaiting client approval`,
+        `${m.inbox.open.length} open directives`,
+        `${c.covered.length} of ${c.total} clients covered for ${m.month}`);}
+    return bits.length?'Here is where we stand. '+bits.join('. ')+'.':'Unlock the dashboard with the PIN first.';
+  }
+  return 'From here I can report money, stuck posts, approvals, team load, the inbox, pipeline, and calendar coverage. For real work — drafts, briefs, reports — ask me at the Command Center on the Mac.';
+}
+
 async function finishCommand(){
   const cmd=cmdBuf.trim(); cmdBuf='';
   if(!cmd){vstate='idle';hud('hide');return;}
   vstate='thinking'; chime(660);
   hud('WORKING','"'+cmd+'"');
+  if(REMOTE){
+    speak(remoteAnswer(cmd),()=>{vstate='idle';hud('hide');if(voiceOn)try{rec.start();}catch(_){}});
+    return;
+  }
   const body={message:cmd};
   if(window._sevak)body.sevak=JSON.stringify(window._sevak);
   const {messages}=await (await fetch('/api/chat')).json().catch(()=>({messages:[]}));
@@ -792,7 +848,6 @@ setInterval(async()=>{
 },2500);
 
 function toggleVoice(){
-  if(REMOTE)return toast('⚠ VOICE RUNS ON THE MAC ONLY');
   voiceOn=!voiceOn;
   $('#voice-btn').textContent=voiceOn?'🎙 VOICE ON':'🎙 VOICE OFF';
   $('#voice-btn').style.borderColor=voiceOn?'var(--mag)':'rgba(255,255,255,.15)';
