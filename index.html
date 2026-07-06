@@ -771,6 +771,8 @@ function startRec(){
 function remoteAnswer(cmd){
   const q=cmd.toLowerCase(), m=window._m, sv=window._sevak||{};
   const inr=n=>'rupees '+Math.round(n||0).toLocaleString('en-IN');
+  if(/draft|create|make|write|generate|send|prepare|schedule|banao|bhejo/.test(q))
+    return 'That is real work — I draft and send from the Command Center on the Mac. From the phone I can report numbers: money, approvals, team load, inbox, calendar coverage.';
   if(/money|overdue|invoice|owe|collect|bill|payment|paisa/.test(q)){
     if(!sv.money)return 'Money data needs Digital Sevak — tap the money panel and sign in once.';
     const mo=sv.money;
