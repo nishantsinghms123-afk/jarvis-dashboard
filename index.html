@@ -828,7 +828,7 @@ function remoteAnswer(cmd){
   if(/brief/.test(q)){
     return m&&m.last_brief?`Last morning brief was ${m.last_brief}${m.brief_today?', which is today':''}. The full text lives in the briefings folder on the Mac.`:'No brief on record yet.';
   }
-  if(/status|summary|overview|how (are|is)|everything|kya (haal|chal)/.test(q)){
+  if(/status|summary|overview|how (are|is)|everything|kya (haal|chal)|what should i do|priorit|plan.{0,8}day|aaj kya/.test(q)){
     const bits=[];
     if(sv.money)bits.push(`${inr(sv.money.overdue_amount)} overdue`);
     if(m){const c=m.calendar_coverage;
