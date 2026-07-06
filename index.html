@@ -165,7 +165,6 @@ h3 span{color:var(--mag-soft)}
 #toast.show{transform:translate(-50%,0)}
 
 /* ---------- remote view (GitHub Pages) ---------- */
-body.remote #console-btn{display:none}
 
 /* ---------- phone / small screens ---------- */
 @media(max-width:900px){
@@ -444,6 +443,9 @@ async function loadRemoteMetrics(){
 if(REMOTE){
   document.body.classList.add('remote');
   $('#feed').innerHTML='<div class="empty">AGENTS RUN ON THE MAC — THIS IS THE READ-ONLY REMOTE VIEW</div>';
+  $('#console-btn').textContent='◈ ASK JARVIS';
+  document.querySelector('#console .sub').textContent='REMOTE — ANSWERS FROM YOUR LIVE NUMBERS · REAL WORK HAPPENS ON THE MAC';
+  $('#chat-in').placeholder='Ask about money, approvals, stuck posts, team load, inbox, calendar coverage…';
   loadRemoteMetrics(); setInterval(loadRemoteMetrics,300000);
 }else{
   loadMetrics(); setInterval(loadMetrics,30000);
@@ -662,16 +664,30 @@ loadSevak(); setInterval(loadSevak,60000);
 /* ================= JARVIS CONSOLE ================= */
 let consolePoll=null, chatBusy=false;
 function toggleConsole(){
-  if(REMOTE)return toast('⚠ JARVIS CONSOLE RUNS ON THE MAC ONLY');
   const c=$('#console');
   const open=c.style.display==='none';
   c.style.display=open?'flex':'none';
-  if(open){loadChat();consolePoll=setInterval(loadChat,2000);$('#chat-in').focus();}
-  else clearInterval(consolePoll);
+  if(open){
+    if(REMOTE)renderRemoteChat();
+    else{loadChat();consolePoll=setInterval(loadChat,2000);}
+    $('#chat-in').focus();
+  }else clearInterval(consolePoll);
 }
 async function resetConsole(){
+  if(REMOTE){RMSGS=[];renderRemoteChat();return toast('◈ NEW CONVERSATION');}
   await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reset:true})});
   loadChat(); toast('◈ NEW CONVERSATION');
+}
+/* remote chat = same brain as remote voice, kept in this tab only */
+let RMSGS=[];
+function renderRemoteChat(){
+  const log=$('#chat-log');
+  log.innerHTML=RMSGS.length?RMSGS.map(m=>m.role==='user'
+    ?`<div style="align-self:flex-end;max-width:70%;background:rgba(255,0,238,.10);border:1px solid var(--line-hot);padding:10px 14px;white-space:pre-wrap;line-height:1.6">${esc(m.text)}</div>`
+    :`<div style="align-self:flex-start;max-width:80%;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.3);padding:10px 14px;white-space:pre-wrap;line-height:1.7"><span style="color:var(--mag-soft);font-size:9px;letter-spacing:.2em">JARVIS · ${m.ts}</span><br>${esc(m.text)}</div>`
+  ).join('')
+  :'<div class="note" style="text-align:center;margin-top:10vh">Ask about your numbers — money, approvals, stuck posts, team load, inbox, calendar coverage.<br>Real work (drafting, briefs, reports) happens at the Command Center on the Mac.</div>';
+  log.scrollTop=log.scrollHeight;
 }
 function esc(s){return String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));}
 async function loadChat(){
@@ -695,6 +711,11 @@ async function sendChat(){
   const inp=$('#chat-in'), msg=inp.value.trim();
   if(!msg||chatBusy)return;
   inp.value='';
+  if(REMOTE){
+    RMSGS.push({role:'user',text:msg});
+    RMSGS.push({role:'jarvis',text:remoteAnswer(msg),ts:new Date().toTimeString().slice(0,5)});
+    return renderRemoteChat();
+  }
   const body={message:msg};
   if(window._sevak)body.sevak=JSON.stringify(window._sevak);
   await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
